@@ -12,9 +12,12 @@ app in a desktop and narrow mobile viewport. Include a screenshot if useful.
 The main files are:
 
 - `src/loophole/engine.gleam`: pure simulation and finite strategy search.
-- `src/loophole.gleam`: Lustre state, controls, SVG view, and receipt serialization.
+- `src/loophole.gleam`: experiment selection and the original compute interface.
+- `src/loophole/reputation.gleam`: pure reputation, collateral, and default model.
+- `src/loophole/reputation_ui.gleam`: reputation controls, visualization, and receipt serialization.
 - `src/loophole/browser.mjs`: browser-only file download and hash access.
-- `test/loophole_test.gleam`: model behavior and invariants.
+- `test/loophole_test.gleam` and `test/reputation_test.gleam`: model behavior and invariants.
+- `test/replay-verifier.test.mjs`: receipt compatibility and tamper rejection.
 - `public/style.css`: responsive visual design.
 
 ## Reporting a bug

@@ -1,14 +1,16 @@
 {
   "name": "loophole-playground",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "gleam test",
-    "check": "gleam format --check src test && gleam test && npm run build",
+    "check": "gleam format --check src test && gleam test && npm run build && node --test test/replay-verifier.test.mjs",
     "serve": "node scripts/serve.mjs"
   },
-  "devDependencies": {"esbuild": "0.25.12"}
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
 }

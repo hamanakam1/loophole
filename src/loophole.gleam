@@ -3,6 +3,7 @@ import gleam/json
 import gleam/list
 import gleam/string
 import loophole/engine.{type Frame, type Rules, type Strategy, Fair, Shortest}
+import loophole/reputation_ui
 import lustre
 import lustre/attribute as a
 import lustre/element.{type Element, text}
@@ -18,6 +19,11 @@ fn write_hash(fragment: String) -> Nil
 @external(javascript, "./loophole/browser.mjs", "downloadReceipt")
 fn download_receipt(content: String) -> Nil
 
+type Experiment {
+  Compute
+  Reputation
+}
+
 type Model {
   Model(
     rules: Rules,
@@ -26,10 +32,14 @@ type Model {
     baseline: List(Frame),
     tick: Int,
     searched: Bool,
+    experiment: Experiment,
+    reputation: reputation_ui.Model,
   )
 }
 
 type Msg {
+  ChooseExperiment(Experiment)
+  ReputationMsg(reputation_ui.Msg)
   FindLoophole
   Repair
   PolicyChanged(String)
@@ -49,7 +59,16 @@ pub fn main() {
 
 fn fresh(rules: Rules) -> Model {
   let frames = engine.run(rules, engine.honest())
-  Model(rules, engine.honest(), frames, frames, rules.horizon, False)
+  Model(
+    rules,
+    engine.honest(),
+    frames,
+    frames,
+    rules.horizon,
+    False,
+    Compute,
+    reputation_ui.init(""),
+  )
 }
 
 fn searched(rules: Rules) -> Model {
@@ -61,6 +80,8 @@ fn searched(rules: Rules) -> Model {
     result.baseline,
     rules.horizon,
     True,
+    Compute,
+    reputation_ui.init(""),
   )
 }
 
@@ -72,7 +93,14 @@ fn parsed(value: String, fallback: Int, low: Int, high: Int) -> Int {
 }
 
 fn init(_) -> Model {
-  case string.split(read_hash(), ":") {
+  let fragment = read_hash()
+  case string.split(fragment, ":") {
+    ["rep1", ..] ->
+      Model(
+        ..fresh(engine.default_rules()),
+        experiment: Reputation,
+        reputation: reputation_ui.init(fragment),
+      )
     ["v1", policy, cap, horizon, found, tick] -> {
       let rules =
         engine.Rules(
@@ -95,6 +123,30 @@ fn init(_) -> Model {
 
 fn update(model: Model, msg: Msg) -> Model {
   let next = case msg {
+    ChooseExperiment(experiment) -> Model(..model, experiment: experiment)
+    ReputationMsg(message) -> {
+      case message {
+        reputation_ui.Export ->
+          download_receipt(reputation_ui.receipt(model.reputation))
+        _ -> Nil
+      }
+      Model(
+        ..model,
+        reputation: reputation_ui.update(model.reputation, message),
+      )
+    }
+    _ -> {
+      let next = update_compute(model, msg)
+      Model(..next, reputation: model.reputation, experiment: model.experiment)
+    }
+  }
+  write_hash(share_url(next))
+  next
+}
+
+fn update_compute(model: Model, msg: Msg) -> Model {
+  case msg {
+    ChooseExperiment(_) | ReputationMsg(_) -> model
     FindLoophole -> searched(model.rules)
     Repair -> searched(engine.Rules(..model.rules, policy: Fair))
     PolicyChanged(value) ->
@@ -117,8 +169,6 @@ fn update(model: Model, msg: Msg) -> Model {
       model
     }
   }
-  write_hash(share_url(next))
-  next
 }
 
 fn cls(value: String) {
@@ -153,6 +203,13 @@ fn gain(model: Model) {
 }
 
 fn share_url(model: Model) {
+  case model.experiment {
+    Reputation -> reputation_ui.share_url(model.reputation)
+    Compute -> compute_share_url(model)
+  }
+}
+
+fn compute_share_url(model: Model) {
   "#v1:"
   <> policy_key(model.rules.policy)
   <> ":"
@@ -175,7 +232,7 @@ fn view(model: Model) -> Element(Msg) {
       h.a([a.href("./"), cls("brand"), attr("aria-label", "Loophole home")], [
         h.span([cls("brand-mark")], []),
         text("loophole"),
-        h.span([cls("version")], [text("LAB / 001")]),
+        h.span([cls("version")], [text("LAB / 002")]),
       ]),
       h.nav([attr("aria-label", "Main navigation")], [
         h.a([a.href("#how-it-works")], [text("How it works")]),
@@ -214,20 +271,64 @@ fn view(model: Model) -> Element(Msg) {
           ]),
         ]),
       ]),
-      h.div([cls("lab-heading"), a.id("laboratory")], [
-        h.div([], [
-          label("EXPERIMENT 01"),
-          h.h2([], [text("The shared compute problem")]),
-        ]),
-        pill("4 users · 1 processor · finite resources", "neutral"),
-      ]),
-      h.div([cls("laboratory")], [
-        rules_panel(model),
-        arena(model),
-        results_panel(model),
-      ]),
-      timeline(model),
-      h.div([cls("lower-grid")], [explanation(model), methodology()]),
+      h.nav(
+        [cls("experiment-switcher"), attr("aria-label", "Choose experiment")],
+        [
+          h.button(
+            [
+              event.on_click(ChooseExperiment(Compute)),
+              cls(case model.experiment {
+                Compute -> "experiment-button current"
+                _ -> "experiment-button"
+              }),
+              attr("aria-pressed", case model.experiment {
+                Compute -> "true"
+                _ -> "false"
+              }),
+            ],
+            [h.span([], [text("01")]), text("Shared compute")],
+          ),
+          h.button(
+            [
+              event.on_click(ChooseExperiment(Reputation)),
+              cls(case model.experiment {
+                Reputation -> "experiment-button current"
+                _ -> "experiment-button"
+              }),
+              attr("aria-pressed", case model.experiment {
+                Reputation -> "true"
+                _ -> "false"
+              }),
+            ],
+            [
+              h.span([], [text("02")]),
+              text("The reputation trap"),
+              h.em([], [text("NEW")]),
+            ],
+          ),
+        ],
+      ),
+      case model.experiment {
+        Reputation ->
+          reputation_ui.view(model.reputation) |> element.map(ReputationMsg)
+        Compute ->
+          h.div([], [
+            h.div([cls("lab-heading"), a.id("laboratory")], [
+              h.div([], [
+                label("EXPERIMENT 01"),
+                h.h2([], [text("The shared compute problem")]),
+              ]),
+              pill("4 users · 1 processor · finite resources", "neutral"),
+            ]),
+            h.div([cls("laboratory")], [
+              rules_panel(model),
+              arena(model),
+              results_panel(model),
+            ]),
+            timeline(model),
+            h.div([cls("lower-grid")], [explanation(model), methodology()]),
+          ])
+      },
     ]),
     h.footer([], [
       h.span([], [

@@ -6,11 +6,39 @@ A playable laboratory for unintended incentives. Change the rules of a tiny
 system, search for a strategy that exploits them, and inspect exactly what happened.
 
 **[Open the live playground](https://hamanakam1.github.io/loophole/)** ·
-[How the model works](docs/MODEL.md) · [Contributing](CONTRIBUTING.md) · [MIT license](LICENSE)
+[Compute model](docs/MODEL.md) · [Reputation model](docs/REPUTATION.md) · [Contributing](CONTRIBUTING.md) · [MIT license](LICENSE)
 
-![Loophole finding a job-splitting advantage in the shared compute experiment](docs/screenshots/loophole-desktop.png)
+![The reputation trap: a good rating approves a request far beyond locked collateral](docs/screenshots/reputation-desktop.png)
 
-## The first experiment
+## Two experiments
+
+Use the experiment selector to move between **Shared compute** and **The reputation trap**.
+Each keeps its state while switching. Replay URLs restore the selected experiment.
+
+| Experiment | What the search exploits | Rule to test |
+| --- | --- | --- |
+| Shared compute | Splitting work into tiny jobs jumps the queue | Fair user rotation |
+| The reputation trap | Small deliveries earn a score that unlocks a much larger request | Require collateral to cover the request |
+
+## The reputation trap — new in v0.2.0
+
+**[Open the reputation experiment](https://hamanakam1.github.io/loophole/#rep1:rating:80:64:baseline:5)**
+
+1. Use **Rating only**, minimum rating **80**, and request ceiling **64**.
+2. Press **Find a trust exploit** to evaluate 48 fixed strategies.
+3. Four one-credit deliveries create a rating of **83/100** and lock **4 credits**
+   as collateral. A request for **64** is approved. When the seller defaults,
+   the collateral covers 4 and **60 credits remain uncovered**.
+4. Step backward to inspect the rating and collateral immediately before default.
+5. Press **Require collateral**. The same request is rejected; none of the
+   48 candidates leaves an uncovered loss under this rule.
+
+Try raising the minimum rating to **90** first: the search finds eight small
+successful deliveries and still leaves **56 credits uncovered** on default.
+The collateral rule has a real tradeoff: an honest seller with the same small
+history is also denied the large request. [Read the exact assumptions](docs/REPUTATION.md).
+
+## Shared compute
 
 Four users share one processor. Everyone needs exactly 12 compute units.
 Three submit normal jobs. The fourth, Rogue, searches for a better strategy.
@@ -29,14 +57,15 @@ to have discovered job-splitting attacks. The project brings rule editing,
 bounded adversarial search, visual replay, and a reproducible record together in
 an approachable browser experiment.
 
-## What is in v0.1.0
+## What is in v0.2.0
 
-- Two executable scheduling policies: shortest remaining job and fair user rotation.
+- Shared compute: two executable scheduling policies: shortest remaining job and fair user rotation.
 - Editable per-user queue caps and observation windows.
-- Exhaustive evaluation of a documented, finite set of 36 strategies.
-- Baseline comparison using the same policy, cap, workload, and time window.
-- Per-tick replay showing allocated work, the last served user, and pending jobs.
-- Shareable replay links and JSON exports containing the full job trace.
+- Reputation: rating-only and collateral-backed approval, with editable minimum ratings and request ceilings.
+- Exhaustive evaluation of documented finite sets: 36 compute strategies and 48 reputation strategies.
+- Matched baseline comparisons using the same rules as the adversarial run.
+- Step-by-step replay of compute allocations or reputation, collateral, and request outcomes.
+- Shareable replay links and JSON exports containing the full state trace.
 - Responsive desktop and mobile interface, keyboard-operable controls, text
   alternatives for the visualization, and reduced-motion support.
 - No account, API key, analytics, backend, or paid inference.
@@ -76,11 +105,14 @@ PATH, `GLEAM_BIN=/path/to/gleam npm run build` works for the build command.
 npm run check
 ```
 
-This checks Gleam formatting, runs the Gleam tests, and builds the browser bundle.
+This checks Gleam formatting, runs 13 Gleam tests, builds the browser bundle, and runs four Node replay-verifier tests.
 The tests cover deterministic replay, actual exploit gain, fair rotation,
 delayed submission, idle behavior, job-ID uniqueness, queue limits, and work
-conservation. The invariant test explores every candidate strategy across both
-policies and three queue caps, checking every frame through 48 ticks.
+conservation. Compute invariants cover 216 configurations through 48 ticks.
+Reputation invariants cover 2,304 traces across strategies, approval policies,
+thresholds, request ceilings, and honest/adversarial behavior. The replay verifier
+checks 60 reputation configurations, the original compute export, and rejection
+of altered records.
 
 GitHub Actions runs these checks and deploys `dist/` to GitHub Pages on `main`.
 Dependencies are locked; third-party Actions are pinned to commit hashes.
@@ -90,6 +122,8 @@ Dependencies are locked; third-party Actions are pinned to commit hashes.
 Use **Export JSON** in the app. After building locally:
 
 ```sh
+node scripts/verify-replay.mjs /path/to/loophole-reputation-v1.json
+# Original compute exports remain supported:
 node scripts/verify-replay.mjs /path/to/loophole-replay-v1.json
 ```
 
@@ -99,17 +133,27 @@ model's behavior, not a signature, attestation, or proof about a real service.
 
 ## Limits, deliberately visible
 
-The search covers 36 fixed strategies. It does not search arbitrary programs or
+Compute search covers 36 fixed strategies; reputation search covers 48. It does not search arbitrary programs or
 adaptive strategies. Fair rotation assumes stable identities; Sybil attacks are
 outside the model. There are no network delays, job-switching costs, variable
 processor capacity, or stochastic workloads. At 48 ticks all users finish, so
 the final allocation hides the earlier advantage. Shorter windows matter.
 
-The current release has one scenario. New experiments should bring their own
+Reputation additionally assumes enforceable collateral, stable identities,
+accurate outcomes, and instant settlement. It models uncovered loss, not seller
+profit or real-world fraud rates. See [the reputation model](docs/REPUTATION.md).
+
+The current release has two scenarios. New experiments should bring their own
 explicit rules, useful counterexample, deterministic trace, and tests.
 
 <details>
-<summary>Fair rotation and mobile screenshots</summary>
+<summary>Collateral mitigation, mobile, and original compute screenshots</summary>
+
+![Collateral approval rejects the unsupported request](docs/screenshots/reputation-collateral.png)
+
+<img src="docs/screenshots/reputation-mobile.png" alt="The reputation experiment on mobile" width="360">
+
+The original shared compute experiment, as captured for v0.1.0:
 
 ![Fair rotation removes the measured advantage](docs/screenshots/loophole-fair.png)
 
