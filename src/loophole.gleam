@@ -2,6 +2,7 @@ import gleam/int
 import gleam/json
 import gleam/list
 import gleam/string
+import loophole/collusion_ui
 import loophole/engine.{type Frame, type Rules, type Strategy, Fair, Shortest}
 import loophole/reputation_ui
 import lustre
@@ -22,6 +23,7 @@ fn download_receipt(content: String) -> Nil
 type Experiment {
   Compute
   Reputation
+  Collusion
 }
 
 type Model {
@@ -34,12 +36,14 @@ type Model {
     searched: Bool,
     experiment: Experiment,
     reputation: reputation_ui.Model,
+    collusion: collusion_ui.Model,
   )
 }
 
 type Msg {
   ChooseExperiment(Experiment)
   ReputationMsg(reputation_ui.Msg)
+  CollusionMsg(collusion_ui.Msg)
   FindLoophole
   Repair
   PolicyChanged(String)
@@ -68,6 +72,7 @@ fn fresh(rules: Rules) -> Model {
     False,
     Compute,
     reputation_ui.init(""),
+    collusion_ui.init(""),
   )
 }
 
@@ -82,6 +87,7 @@ fn searched(rules: Rules) -> Model {
     True,
     Compute,
     reputation_ui.init(""),
+    collusion_ui.init(""),
   )
 }
 
@@ -95,6 +101,12 @@ fn parsed(value: String, fallback: Int, low: Int, high: Int) -> Int {
 fn init(_) -> Model {
   let fragment = read_hash()
   case string.split(fragment, ":") {
+    ["ring1", ..] ->
+      Model(
+        ..fresh(engine.default_rules()),
+        experiment: Collusion,
+        collusion: collusion_ui.init(fragment),
+      )
     ["rep1", ..] ->
       Model(
         ..fresh(engine.default_rules()),
@@ -124,6 +136,14 @@ fn init(_) -> Model {
 fn update(model: Model, msg: Msg) -> Model {
   let next = case msg {
     ChooseExperiment(experiment) -> Model(..model, experiment: experiment)
+    CollusionMsg(message) -> {
+      case message {
+        collusion_ui.Export ->
+          download_receipt(collusion_ui.receipt(model.collusion))
+        _ -> Nil
+      }
+      Model(..model, collusion: collusion_ui.update(model.collusion, message))
+    }
     ReputationMsg(message) -> {
       case message {
         reputation_ui.Export ->
@@ -137,7 +157,12 @@ fn update(model: Model, msg: Msg) -> Model {
     }
     _ -> {
       let next = update_compute(model, msg)
-      Model(..next, reputation: model.reputation, experiment: model.experiment)
+      Model(
+        ..next,
+        reputation: model.reputation,
+        collusion: model.collusion,
+        experiment: model.experiment,
+      )
     }
   }
   write_hash(share_url(next))
@@ -146,7 +171,7 @@ fn update(model: Model, msg: Msg) -> Model {
 
 fn update_compute(model: Model, msg: Msg) -> Model {
   case msg {
-    ChooseExperiment(_) | ReputationMsg(_) -> model
+    ChooseExperiment(_) | ReputationMsg(_) | CollusionMsg(_) -> model
     FindLoophole -> searched(model.rules)
     Repair -> searched(engine.Rules(..model.rules, policy: Fair))
     PolicyChanged(value) ->
@@ -204,6 +229,7 @@ fn gain(model: Model) {
 
 fn share_url(model: Model) {
   case model.experiment {
+    Collusion -> collusion_ui.share_url(model.collusion)
     Reputation -> reputation_ui.share_url(model.reputation)
     Compute -> compute_share_url(model)
   }
@@ -232,7 +258,7 @@ fn view(model: Model) -> Element(Msg) {
       h.a([a.href("./"), cls("brand"), attr("aria-label", "Loophole home")], [
         h.span([cls("brand-mark")], []),
         text("loophole"),
-        h.span([cls("version")], [text("LAB / 002")]),
+        h.span([cls("version")], [text("LAB / 003")]),
       ]),
       h.nav([attr("aria-label", "Main navigation")], [
         h.a([a.href("#how-it-works")], [text("How it works")]),
@@ -274,41 +300,20 @@ fn view(model: Model) -> Element(Msg) {
       h.nav(
         [cls("experiment-switcher"), attr("aria-label", "Choose experiment")],
         [
-          h.button(
-            [
-              event.on_click(ChooseExperiment(Compute)),
-              cls(case model.experiment {
-                Compute -> "experiment-button current"
-                _ -> "experiment-button"
-              }),
-              attr("aria-pressed", case model.experiment {
-                Compute -> "true"
-                _ -> "false"
-              }),
-            ],
-            [h.span([], [text("01")]), text("Shared compute")],
+          experiment_button(model, Compute, "01", "Shared compute", False),
+          experiment_button(
+            model,
+            Reputation,
+            "02",
+            "The reputation trap",
+            False,
           ),
-          h.button(
-            [
-              event.on_click(ChooseExperiment(Reputation)),
-              cls(case model.experiment {
-                Reputation -> "experiment-button current"
-                _ -> "experiment-button"
-              }),
-              attr("aria-pressed", case model.experiment {
-                Reputation -> "true"
-                _ -> "false"
-              }),
-            ],
-            [
-              h.span([], [text("02")]),
-              text("The reputation trap"),
-              h.em([], [text("NEW")]),
-            ],
-          ),
+          experiment_button(model, Collusion, "03", "The review ring", True),
         ],
       ),
       case model.experiment {
+        Collusion ->
+          collusion_ui.view(model.collusion) |> element.map(CollusionMsg)
         Reputation ->
           reputation_ui.view(model.reputation) |> element.map(ReputationMsg)
         Compute ->
@@ -344,6 +349,37 @@ fn view(model: Model) -> Element(Msg) {
       ]),
     ]),
   ])
+}
+
+fn experiment_button(
+  model: Model,
+  experiment: Experiment,
+  number: String,
+  title: String,
+  is_new: Bool,
+) {
+  let active = model.experiment == experiment
+  h.button(
+    [
+      event.on_click(ChooseExperiment(experiment)),
+      cls(case active {
+        True -> "experiment-button current"
+        False -> "experiment-button"
+      }),
+      attr("aria-pressed", case active {
+        True -> "true"
+        False -> "false"
+      }),
+    ],
+    [
+      h.span([], [text(number)]),
+      text(title),
+      case is_new {
+        True -> h.em([], [text("NEW")])
+        False -> text("")
+      },
+    ],
+  )
 }
 
 fn rules_panel(model: Model) -> Element(Msg) {

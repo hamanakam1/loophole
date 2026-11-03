@@ -56,3 +56,42 @@ test('rejects invalid schema, rule bounds, replay position and policy mismatch',
     assert.throws(() => verifyRecord(altered));
   }
 });
+
+const ringUI = await import('../build/dev/javascript/loophole/loophole/collusion_ui.mjs');
+const ringRecord = fragment => JSON.parse(ringUI.receipt(ringUI.init(fragment)));
+
+test('review baseline, exploit, cap and bypass recompute across 60 configurations', () => {
+  for (const policy of ['all', 'unique']) {
+    for (const budget of [3, 10, 20, 24, 40]) {
+      for (const threshold of [60, 80, 95]) {
+        for (const mode of ['baseline', 'searched']) {
+          assert.match(verifyRecord(ringRecord(`ring1:${policy}:${budget}:${threshold}:${mode}:0`)), /review frames/);
+        }
+      }
+    }
+  }
+});
+
+test('review verifier rejects altered accounting, ratings, search and replay bounds', () => {
+  for (const mutate of [
+    r => { r.frames[3].spent = 0; },
+    r => { r.frames[3].reviews[0] = 8; },
+    r => { r.frames[3].counted = 20; },
+    r => { r.frames[3].rating = 100; },
+    r => { r.frames[3].promoted = true; },
+    r => { r.rating = 40; },
+    r => { r.promoted = false; },
+    r => { r.strategy.accounts = 8; },
+    r => { r.feasible = 24; },
+    r => { r.budget = 41; },
+    r => { r.threshold = 100; },
+    r => { r.policy = 'trust-all'; },
+    r => { r.replay_fragment = '#ring1:all:20:80:searched:999'; },
+    r => { r.replay_fragment = '#ring1:all:20:80:searched:-1'; },
+    r => { r.replay_fragment = '#ring1:unique:20:80:searched:19'; },
+  ]) {
+    const altered = ringRecord('ring1:all:20:80:searched:19');
+    mutate(altered);
+    assert.throws(() => verifyRecord(altered));
+  }
+});

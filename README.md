@@ -6,13 +6,13 @@ A playable laboratory for unintended incentives. Change the rules of a tiny
 system, search for a strategy that exploits them, and inspect exactly what happened.
 
 **[Open the live playground](https://hamanakam1.github.io/loophole/)** ·
-[Compute model](docs/MODEL.md) · [Reputation model](docs/REPUTATION.md) · [Contributing](CONTRIBUTING.md) · [MIT license](LICENSE)
+[Compute model](docs/MODEL.md) · [Reputation model](docs/REPUTATION.md) · [Review model](docs/COLLUSION.md) · [Contributing](CONTRIBUTING.md) · [MIT license](LICENSE)
 
-![The reputation trap: a good rating approves a request far beyond locked collateral](docs/screenshots/reputation-desktop.png)
+![The review ring: coordinated reviews inflate a rating from 40 to 88](docs/screenshots/collusion-desktop.png)
 
-## Two experiments
+## Three experiments
 
-Use the experiment selector to move between **Shared compute** and **The reputation trap**.
+Use the experiment selector to move between **Shared compute**, **The reputation trap**, and **The review ring**.
 Each keeps its state while switching. Replay URLs restore the selected experiment.
 
 | Experiment | What the search exploits | Rule to test |
@@ -20,7 +20,26 @@ Each keeps its state while switching. Replay URLs restore the selected experimen
 | Shared compute | Splitting work into tiny jobs jumps the queue | Fair user rotation |
 | The reputation trap | Small deliveries earn a score that unlocks a much larger request | Require collateral to cover the request |
 
-## The reputation trap — new in v0.2.0
+| The review ring | Coordinated accounts repeat praise until a seller crosses a promotion gate | One vote per reviewer, then test its limit |
+
+## The review ring — new in v0.3.0
+
+**[Open the review experiment](https://hamanakam1.github.io/loophole/#ring1:all:20:80:baseline:1)**
+
+1. Four genuine reviewers rate a seller **40/100**. Keep that feedback fixed.
+2. Press **Find a review exploit**. Among 24 candidates, two accounts posting eight
+   five-star reviews each spend **20 units** and lift the rating to **88**.
+3. Press **Cap each reviewer**. The search adapts to six accounts posting once each.
+   The rating falls to **76**, below the promotion threshold of 80.
+4. Press **Test the limit: budget 24**. Eight accounts now reach **80**, even with
+   one vote per reviewer. A distinct account is not necessarily an independent person.
+5. Scrub through account creation and reviews, share the replay, or export its trace.
+
+The cap blocks promotion at one budget but leaves inflation and a higher-budget bypass.
+Costs are synthetic units, and the simulator's labels are not a collusion detector.
+[Read the exact model and limits](docs/COLLUSION.md).
+
+## The reputation trap
 
 **[Open the reputation experiment](https://hamanakam1.github.io/loophole/#rep1:rating:80:64:baseline:5)**
 
@@ -57,12 +76,13 @@ to have discovered job-splitting attacks. The project brings rule editing,
 bounded adversarial search, visual replay, and a reproducible record together in
 an approachable browser experiment.
 
-## What is in v0.2.0
+## What is in v0.3.0
 
 - Shared compute: two executable scheduling policies: shortest remaining job and fair user rotation.
 - Editable per-user queue caps and observation windows.
 - Reputation: rating-only and collateral-backed approval, with editable minimum ratings and request ceilings.
-- Exhaustive evaluation of documented finite sets: 36 compute strategies and 48 reputation strategies.
+- Review weighting: every review or one vote per reviewer, with editable coordination budgets and promotion thresholds.
+- Exhaustive evaluation of documented finite sets: 36 compute, 48 reputation, and 24 review strategies.
 - Matched baseline comparisons using the same rules as the adversarial run.
 - Step-by-step replay of compute allocations or reputation, collateral, and request outcomes.
 - Shareable replay links and JSON exports containing the full state trace.
@@ -105,14 +125,15 @@ PATH, `GLEAM_BIN=/path/to/gleam npm run build` works for the build command.
 npm run check
 ```
 
-This checks Gleam formatting, runs 13 Gleam tests, builds the browser bundle, and runs four Node replay-verifier tests.
+This checks Gleam formatting, runs 19 Gleam tests, builds the browser bundle, and runs six Node replay-verifier tests.
 The tests cover deterministic replay, actual exploit gain, fair rotation,
 delayed submission, idle behavior, job-ID uniqueness, queue limits, and work
 conservation. Compute invariants cover 216 configurations through 48 ticks.
 Reputation invariants cover 2,304 traces across strategies, approval policies,
 thresholds, request ceilings, and honest/adversarial behavior. The replay verifier
-checks 60 reputation configurations, the original compute export, and rejection
-of altered records.
+checks 60 reputation and 60 review configurations, the original compute export, and rejection
+of altered records. Review invariants cover 240 traces across both policies and
+five budgets, with deterministic best-score selection and cheapest-cost tie breaking.
 
 GitHub Actions runs these checks and deploys `dist/` to GitHub Pages on `main`.
 Dependencies are locked; third-party Actions are pinned to commit hashes.
@@ -122,6 +143,8 @@ Dependencies are locked; third-party Actions are pinned to commit hashes.
 Use **Export JSON** in the app. After building locally:
 
 ```sh
+node scripts/verify-replay.mjs /path/to/loophole-collusion-v1.json
+# Reputation exports remain supported:
 node scripts/verify-replay.mjs /path/to/loophole-reputation-v1.json
 # Original compute exports remain supported:
 node scripts/verify-replay.mjs /path/to/loophole-replay-v1.json
@@ -133,7 +156,7 @@ model's behavior, not a signature, attestation, or proof about a real service.
 
 ## Limits, deliberately visible
 
-Compute search covers 36 fixed strategies; reputation search covers 48. It does not search arbitrary programs or
+Compute search covers 36 fixed strategies; reputation search covers 48; reviews cover 24. It does not search arbitrary programs or
 adaptive strategies. Fair rotation assumes stable identities; Sybil attacks are
 outside the model. There are no network delays, job-switching costs, variable
 processor capacity, or stochastic workloads. At 48 ticks all users finish, so
@@ -143,11 +166,21 @@ Reputation additionally assumes enforceable collateral, stable identities,
 accurate outcomes, and instant settlement. It models uncovered loss, not seller
 profit or real-world fraud rates. See [the reputation model](docs/REPUTATION.md).
 
-The current release has two scenarios. New experiments should bring their own
+The review model assumes four fixed genuine opinions and synthetic costs for coordinated
+accounts and reviews. It does not identify real people, detect collusion, or estimate
+real-world review fraud. See [the review model](docs/COLLUSION.md).
+
+The current release has three scenarios. New experiments should bring their own
 explicit rules, useful counterexample, deterministic trace, and tests.
 
 <details>
-<summary>Collateral mitigation, mobile, and original compute screenshots</summary>
+<summary>Review cap, mobile, and earlier experiment screenshots</summary>
+
+![One vote per reviewer blocks promotion at budget 20](docs/screenshots/collusion-capped.png)
+
+<img src="docs/screenshots/collusion-mobile.png" alt="Review ring on mobile" width="360">
+
+The reputation experiment as captured for v0.2.0:
 
 ![Collateral approval rejects the unsupported request](docs/screenshots/reputation-collateral.png)
 

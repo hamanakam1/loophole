@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import * as reputation from '../build/dev/javascript/loophole/loophole/reputation.mjs';
+import * as ring from '../build/dev/javascript/loophole/loophole/collusion.mjs';
 import * as engine from '../build/dev/javascript/loophole/loophole/engine.mjs';
 
 function verifyCompute(record) {
@@ -66,11 +67,43 @@ function verifyReputation(record) {
   return `Verified ${record.frames.length} reputation frames; ${record.strategies_tested} strategies; uncovered loss ${record.loss}.`;
 }
 
+function verifyCollusion(record) {
+  assert.equal(record.version, '0.3.0', 'Unsupported review model version');
+  assert.ok(['all', 'unique'].includes(record.policy), 'Unknown review policy');
+  assert.ok(Number.isInteger(record.budget) && record.budget >= 3 && record.budget <= 40, 'Invalid budget');
+  assert.ok(Number.isInteger(record.threshold) && record.threshold >= 50 && record.threshold <= 99, 'Invalid threshold');
+  assert.equal(typeof record.searched, 'boolean', 'Invalid search state');
+  const rules = new ring.Rules(record.policy === 'unique' ? new ring.OnePerReviewer() : new ring.EveryReview(), record.budget, record.threshold);
+  const found = record.searched ? ring.search(rules) : null;
+  const strategy = found?.strategy || ring.default_strategy();
+  const frames = found?.frames || ring.run(rules, strategy, false);
+  const final = ring.last(frames);
+  assert.deepEqual(record.strategy, { accounts: strategy.accounts, repeats: strategy.repeats }, 'Strategy differs from deterministic search');
+  assert.equal(record.strategies_tested, record.searched ? 24 : 0);
+  assert.equal(record.feasible, found?.feasible || 0);
+  assert.equal(record.baseline_rating, 40);
+  assert.equal(record.rating, ring.rating(final, rules.policy));
+  assert.equal(record.promoted, ring.promoted(final, rules));
+  assert.deepEqual(record.frames, frames.toArray().map(frame => ({
+    step: frame.step, reviews: frame.reviews.toArray(), spent: frame.spent,
+    event: ring.event_key(frame.event), reviewer: frame.reviewer,
+    counted: ring.counted(frame, rules.policy), rating: ring.rating(frame, rules.policy),
+    promoted: ring.promoted(frame, rules),
+  })), 'Review frame trace differs from model replay');
+  const fragment = record.replay_fragment.split(':');
+  assert.deepEqual(fragment.slice(0, 5), ['#ring1', record.policy, String(record.budget), String(record.threshold), record.searched ? 'searched' : 'baseline']);
+  assert.equal(fragment.length, 6);
+  assert.match(fragment[5], /^\d+$/);
+  assert.ok(Number(fragment[5]) <= final.step, 'Replay step exceeds trace');
+  return `Verified ${record.frames.length} review frames; ${record.strategies_tested} strategies; rating ${record.rating}; promoted ${record.promoted}.`;
+}
+
 export function verifyRecord(record) {
   assert.ok(record && typeof record === 'object', 'Expected a replay object');
   switch (record.schema) {
     case 'loophole.replay.v1': return verifyCompute(record);
     case 'loophole.reputation.v1': return verifyReputation(record);
+    case 'loophole.collusion.v1': return verifyCollusion(record);
     default: throw new Error('Unsupported schema');
   }
 }

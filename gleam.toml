@@ -1,5 +1,5 @@
 name = "loophole"
-version = "0.2.0"
+version = "0.3.0"
 description = "A playable laboratory for unintended incentives"
 licences = ["MIT"]
 target = "javascript"

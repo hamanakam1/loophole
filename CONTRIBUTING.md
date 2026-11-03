@@ -15,6 +15,9 @@ The main files are:
 - `src/loophole.gleam`: experiment selection and the original compute interface.
 - `src/loophole/reputation.gleam`: pure reputation, collateral, and default model.
 - `src/loophole/reputation_ui.gleam`: reputation controls, visualization, and receipt serialization.
+- `src/loophole/collusion.gleam`: pure review weighting, budget accounting, and finite search.
+- `src/loophole/collusion_ui.gleam`: review controls, crowd visualization, and receipt serialization.
+- `test/collusion_test.gleam`: inflation, mitigation limits, accounting, and search invariants.
 - `src/loophole/browser.mjs`: browser-only file download and hash access.
 - `test/loophole_test.gleam` and `test/reputation_test.gleam`: model behavior and invariants.
 - `test/replay-verifier.test.mjs`: receipt compatibility and tamper rejection.
