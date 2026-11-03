@@ -1,0 +1,34 @@
+# Contributing
+
+Loophole is a small open-source experiment. Keep contributions understandable,
+reproducible, and honest about what the model does and does not establish.
+
+## Development
+
+Use Gleam 1.19.2 and Node.js 22+. Follow the README setup, then run
+`npm run check` before proposing a change. For UI changes, rebuild and check the
+app in a desktop and narrow mobile viewport. Include a screenshot if useful.
+
+The main files are:
+
+- `src/loophole/engine.gleam`: pure simulation and finite strategy search.
+- `src/loophole.gleam`: Lustre state, controls, SVG view, and receipt serialization.
+- `src/loophole/browser.mjs`: browser-only file download and hash access.
+- `test/loophole_test.gleam`: model behavior and invariants.
+- `public/style.css`: responsive visual design.
+
+## Reporting a bug
+
+Include the replay link or exported JSON, browser/version, expected result, and
+actual result. Use synthetic examples; do not submit private production data.
+
+## Adding an experiment
+
+Open an issue describing the rule, incentive, candidate strategy space, and a
+small demonstrable failure before making a large change. Keep transitions pure
+and deterministic. Add a test that demonstrates the failure and checks any
+proposed repair. Label bounded search as bounded search.
+
+Please keep discussion kind and specific. Critique ideas and code, not people.
+By contributing, you agree to license your contribution under the project's MIT
+license.
